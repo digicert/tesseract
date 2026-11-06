@@ -62,8 +62,10 @@ Use a TLS/authentication proxy where required, validate deployment inputs, and
 inject exporter credentials securely rather than hardcoding secrets.
 
 Telemetry providers shut down after HTTP requests drain on normal termination.
-As in POSIX, startup failures that call `os.Exit` bypass deferred cleanup, and
-telemetry shutdown does not have a separate timeout.
+Telemetry shutdown has a 10-second limit; pending telemetry may be lost if the
+limit is reached.
+As in POSIX, startup failures that call `os.Exit` bypass deferred cleanup and
+do not shut down telemetry.
 
 ## Vanilla S3+MySQL support
 

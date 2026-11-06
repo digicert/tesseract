@@ -18,6 +18,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"time"
 
 	t_otel "github.com/transparency-dev/tesseract/internal/otel"
 	"go.opentelemetry.io/contrib/exporters/autoexport"
@@ -86,4 +87,21 @@ func initOTel(ctx context.Context, traceFraction float64, origin string) func(co
 		os.Exit(1)
 	}
 	return shutdown
+}
+
+func shutdownOTelWithTimeout(shutdown func(context.Context), timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		shutdown(ctx)
+	}()
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		slog.Error("OTel shutdown timed out", slog.Any("error", ctx.Err()))
+	}
 }

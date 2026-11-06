@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -28,6 +29,55 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
+
+func TestShutdownOTelWithTimeout(t *testing.T) {
+	t.Run("completes and cancels context", func(t *testing.T) {
+		var shutdownCtx context.Context
+		before := time.Now()
+		shutdownOTelWithTimeout(func(ctx context.Context) {
+			shutdownCtx = ctx
+		}, 10*time.Second)
+		if shutdownCtx == nil {
+			t.Fatal("shutdown was not called")
+		}
+		deadline, ok := shutdownCtx.Deadline()
+		if !ok || deadline.Before(before.Add(10*time.Second)) || deadline.After(time.Now().Add(10*time.Second)) {
+			t.Fatalf("unexpected shutdown deadline: %v, present: %v", deadline, ok)
+		}
+		if !errors.Is(shutdownCtx.Err(), context.Canceled) {
+			t.Fatalf("shutdown context was not canceled: %v", shutdownCtx.Err())
+		}
+	})
+
+	t.Run("returns when shutdown ignores deadline", func(t *testing.T) {
+		started := make(chan context.Context, 1)
+		release := make(chan struct{})
+		finished := make(chan struct{})
+		defer close(release)
+		go func() {
+			defer close(finished)
+			shutdownOTelWithTimeout(func(ctx context.Context) {
+				started <- ctx
+				<-release
+			}, 20*time.Millisecond)
+		}()
+		var shutdownCtx context.Context
+		select {
+		case ctx := <-started:
+			shutdownCtx = ctx
+		case <-time.After(time.Second):
+			t.Fatal("shutdown was not called")
+		}
+		select {
+		case <-finished:
+		case <-time.After(time.Second):
+			t.Fatal("shutdown did not return after its deadline")
+		}
+		if !errors.Is(shutdownCtx.Err(), context.DeadlineExceeded) {
+			t.Fatalf("shutdown context error: %v", shutdownCtx.Err())
+		}
+	})
+}
 
 func TestTraceFractionStartup(t *testing.T) {
 	for _, tc := range []struct {

@@ -128,7 +128,7 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.Level(*slogLevel)})))
 
 	shutdownOTel := initOTel(ctx, *traceFraction, *origin)
-	defer shutdownOTel(ctx)
+	defer shutdownOTelWithTimeout(shutdownOTel, 10*time.Second)
 
 	var signer *ECDSAWithSHA256Signer
 	var err error
