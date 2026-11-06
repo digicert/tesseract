@@ -32,8 +32,9 @@ export OTEL_EXPORTER_OTLP_PROTOCOL=grpc
 export OTEL_EXPORTER_OTLP_ENDPOINT=https://collector.example.com:4317
 ```
 
-Set `--trace_fraction` to a value from `0` to `1` for the fraction of root traces
-to sample. The default is `0`; periodic Tessera root spans marked with
+Set `--trace_fraction` to a finite value from `0` to `1` inclusive for the
+fraction of root traces to sample; invalid values cause startup to fail. The
+default is `0`; periodic Tessera root spans marked with
 `tessera.periodic` are still sampled. Child spans follow their parent's sampling
 decision. Set `OTEL_TRACES_EXPORTER=none` to disable trace export, or
 `OTEL_METRICS_EXPORTER=none` to disable metric export. Exporter selection defaults

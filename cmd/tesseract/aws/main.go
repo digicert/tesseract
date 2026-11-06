@@ -23,6 +23,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
@@ -111,7 +112,7 @@ var (
 	signerPublicKeyFile        = flag.String("signer_public_key_file", "", "Path to public key file for checkpoints and SCTs signer (alternative to secrets manager)")
 	signerPrivateKeyFile       = flag.String("signer_private_key_file", "", "Path to private key file for checkpoints and SCTs signer (alternative to secrets manager)")
 	usePathStyle               = flag.Bool("s3_use_path_style", false, "Whether to force the AWS S3 client to use path-style bucket references, probably only useful for on-prem deployments")
-	traceFraction              = flag.Float64("trace_fraction", 0, "Fraction of open-telemetry span traces to sample")
+	traceFraction              = flag.Float64("trace_fraction", 0, "Fraction of open-telemetry span traces to sample, from 0 to 1 inclusive")
 	slogLevel                  = flag.Int("slog_level", 0, "The cut-off threshold for structured logging. See cmd/tesseract/README.md#Logging.")
 )
 
@@ -119,6 +120,11 @@ var (
 func main() {
 	flag.Parse()
 	ctx := context.Background()
+	if math.IsNaN(*traceFraction) || *traceFraction < 0 || *traceFraction > 1 {
+		slog.ErrorContext(ctx, "--trace_fraction must be a finite number between 0 and 1 inclusive", slog.Float64("value", *traceFraction))
+		os.Exit(1)
+	}
+
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.Level(*slogLevel)})))
 
 	shutdownOTel := initOTel(ctx, *traceFraction, *origin)

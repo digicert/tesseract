@@ -29,6 +29,69 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+func TestTraceFractionStartup(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		value   string
+		invalid bool
+	}{
+		{name: "default"},
+		{name: "zero", value: "0"},
+		{name: "negative-zero", value: "-0"},
+		{name: "smallest-positive", value: "5e-324"},
+		{name: "fraction", value: "0.5"},
+		{name: "below-one", value: "0.9999999999999999"},
+		{name: "one", value: "1"},
+		{name: "negative", value: "-5e-324", invalid: true},
+		{name: "above-one", value: "1.0000000000000002", invalid: true},
+		{name: "nan", value: "NaN", invalid: true},
+		{name: "positive-infinity", value: "+Inf", invalid: true},
+		{name: "negative-infinity", value: "-Inf", invalid: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			command := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestTraceFractionStartupProcess$")
+			for _, entry := range os.Environ() {
+				if !strings.HasPrefix(entry, "OTEL_METRICS_EXPORTER=") && !strings.HasPrefix(entry, "TESSERACT_TRACE_FRACTION_TEST=") {
+					command.Env = append(command.Env, entry)
+				}
+			}
+			value := tc.value
+			if tc.name == "default" {
+				value = "default"
+			}
+			command.Env = append(command.Env, "OTEL_METRICS_EXPORTER=invalid", "TESSERACT_TRACE_FRACTION_TEST="+value)
+			output, err := command.CombinedOutput()
+			if ctx.Err() != nil {
+				t.Fatalf("startup timed out: %v: %s", ctx.Err(), output)
+			}
+			if err == nil {
+				t.Fatalf("expected startup failure: %s", output)
+			}
+			expected := "Failed to create the metric reader"
+			if tc.invalid {
+				expected = "--trace_fraction must be a finite number between 0 and 1 inclusive"
+			}
+			if !strings.Contains(string(output), expected) {
+				t.Fatalf("expected %q, got: %s", expected, output)
+			}
+		})
+	}
+}
+
+func TestTraceFractionStartupProcess(t *testing.T) {
+	value := os.Getenv("TESSERACT_TRACE_FRACTION_TEST")
+	if value == "" {
+		t.Skip("subprocess helper")
+	}
+	os.Args = []string{os.Args[0]}
+	if value != "default" {
+		os.Args = append(os.Args, "--trace_fraction="+value)
+	}
+	main()
+}
+
 func TestInitOTel(t *testing.T) {
 	for _, scenario := range []string{"prometheus", "none", "sample-all", "invalid-exporter", "invalid-port", "occupied-port"} {
 		t.Run(scenario, func(t *testing.T) {
